@@ -14,8 +14,6 @@ export class UIController {
       stopButton: document.getElementById("stop-btn"),
       clearButton: document.getElementById("clear-btn"),
       undoButton: document.getElementById("undo-btn"),
-      monitorToggleButton: document.getElementById("monitor-toggle-btn"),
-      processingToggleButton: document.getElementById("input-processing-btn"),
       indicator: document.getElementById("loop-indicator"),
       volume: document.getElementById("master-volume"),
       supportNote: document.getElementById("support-note"),
@@ -33,8 +31,6 @@ export class UIController {
     this.elements.stopButton.addEventListener("click", () => this.handlers.onStop());
     this.elements.clearButton.addEventListener("click", () => this.handlers.onClear());
     this.elements.undoButton.addEventListener("click", () => this.handlers.onUndo());
-    this.elements.monitorToggleButton.addEventListener("click", () => this.handlers.onToggleMonitor());
-    this.elements.processingToggleButton.addEventListener("click", () => this.handlers.onToggleProcessing());
     this.elements.refreshDevicesButton.addEventListener("click", () => this.handlers.onRefreshDevices());
     this.elements.inputSelect.addEventListener("change", () => this.handlers.onInputDeviceChange(this.elements.inputSelect.value));
     this.elements.outputSelect.addEventListener("change", () => this.handlers.onOutputDeviceChange(this.elements.outputSelect.value));
@@ -62,14 +58,6 @@ export class UIController {
       option.textContent = device.label || `Device ${select.options.length + 1}`;
       select.appendChild(option);
     }
-  }
-
-  setMonitorState(enabled) {
-    this.elements.monitorToggleButton.textContent = `Input Monitor: ${enabled ? "On" : "Off"}`;
-  }
-
-  setProcessingState(mode) {
-    this.elements.processingToggleButton.textContent = `Input Processing: ${mode === "voice" ? "Voice" : "Raw"}`;
   }
 
   renderState(state, { hasLoop }) {

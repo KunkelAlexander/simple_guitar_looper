@@ -10,28 +10,23 @@ export class AudioEngine {
     this.stream = null;
     this.sourceNode = null;
     this.inputGain = null;
-    this.captureGain = null;
     this.monitorGain = null;
     this.masterGain = null;
-    this.loopGain = null;
-    this.compressor = null;
     this.analyser = null;
     this.outputNode = null;
     this.outputElement = null;
 
     this.effects = [];
     this.recorderNode = null;
-    this.silentSink = null;
     this.recordedChunks = [[], []];
 
     this.loopBuffer = null;
     this.previousLoopBuffer = null;
     this.loopSource = null;
+    this.loopStartTime = 0;
 
     this.onLevel = null;
     this.levelRaf = null;
-    this.isCapturing = false;
-    this.inputMonitorEnabled = false;
   }
 
   async init(stream) {
@@ -41,20 +36,9 @@ export class AudioEngine {
 
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
     this.inputGain = this.audioContext.createGain();
-    this.captureGain = this.audioContext.createGain();
     this.monitorGain = this.audioContext.createGain();
-    this.loopGain = this.audioContext.createGain();
     this.masterGain = this.audioContext.createGain();
     this.masterGain.gain.value = 0.8;
-    this.loopGain.gain.value = 0.9;
-
-    this.compressor = this.audioContext.createDynamicsCompressor();
-    this.compressor.threshold.value = -18;
-    this.compressor.knee.value = 18;
-    this.compressor.ratio.value = 3;
-    this.compressor.attack.value = 0.003;
-    this.compressor.release.value = 0.2;
-
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 512;
 
@@ -65,7 +49,6 @@ export class AudioEngine {
 
     this.#wireGraph();
     this.#setupRecorder();
-    this.setInputMonitoring(false);
     this.#startLevelMeter();
   }
 
@@ -74,7 +57,9 @@ export class AudioEngine {
     this.clear();
     this.#teardownLevelMeter();
     this.stream?.getTracks().forEach((track) => track.stop());
-    this.sourceNode?.disconnect();
+    if (this.sourceNode) {
+      this.sourceNode.disconnect();
+    }
     this.stream = stream;
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
     this.#wireGraph();
@@ -83,14 +68,6 @@ export class AudioEngine {
   }
 
   #wireGraph() {
-    this.inputGain.disconnect();
-    this.captureGain.disconnect();
-    this.monitorGain.disconnect();
-    this.masterGain.disconnect();
-    this.loopGain.disconnect();
-    this.compressor.disconnect();
-    this.sourceNode.disconnect();
-
     this.sourceNode.connect(this.inputGain);
 
     let currentNode = this.inputGain;
@@ -99,56 +76,45 @@ export class AudioEngine {
       currentNode = effect.output;
     }
 
-    currentNode.connect(this.captureGain);
-    this.captureGain.connect(this.monitorGain);
-    this.captureGain.connect(this.analyser);
-
+    currentNode.connect(this.monitorGain);
     this.monitorGain.connect(this.masterGain);
-    this.loopGain.connect(this.masterGain);
-    this.masterGain.connect(this.compressor);
-
     this.outputNode = this.audioContext.createMediaStreamDestination();
-    this.compressor.connect(this.outputNode);
+    this.masterGain.connect(this.outputNode);
+    this.monitorGain.connect(this.analyser);
 
-    this.outputElement = this.outputElement || new Audio();
+    this.outputElement = new Audio();
     this.outputElement.autoplay = true;
     this.outputElement.srcObject = this.outputNode.stream;
     this.outputElement.play().catch(() => {});
   }
 
   #setupRecorder() {
-    this.recorderNode?.disconnect();
-    this.silentSink?.disconnect();
-
-    const channelCount = 1;
-    const bufferSize = 2048;
+    if (this.recorderNode) {
+      this.recorderNode.disconnect();
+    }
+    const channelCount = 2;
+    const bufferSize = 1024;
     this.recorderNode = this.audioContext.createScriptProcessor(bufferSize, channelCount, channelCount);
-    this.silentSink = this.audioContext.createGain();
-    this.silentSink.gain.value = 0;
-
-    this.captureGain.connect(this.recorderNode);
-    this.recorderNode.connect(this.silentSink);
-    this.silentSink.connect(this.audioContext.destination);
+    this.monitorGain.connect(this.recorderNode);
+    this.recorderNode.connect(this.audioContext.destination);
+    this.isCapturing = false;
 
     this.recorderNode.onaudioprocess = (event) => {
       if (!this.isCapturing) {
         return;
       }
-      const mono = event.inputBuffer.getChannelData(0);
-      this.recordedChunks[0].push(new Float32Array(mono));
-      this.recordedChunks[1].push(new Float32Array(mono));
+      const left = event.inputBuffer.getChannelData(0);
+      const right = event.inputBuffer.numberOfChannels > 1
+        ? event.inputBuffer.getChannelData(1)
+        : left;
+
+      this.recordedChunks[0].push(new Float32Array(left));
+      this.recordedChunks[1].push(new Float32Array(right));
     };
   }
 
-  setInputMonitoring(enabled) {
-    this.inputMonitorEnabled = enabled;
-    if (this.monitorGain) {
-      this.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, this.audioContext.currentTime, 0.01);
-    }
-  }
-
   #startLevelMeter() {
-    if (!this.onLevel || !this.analyser) {
+    if (!this.onLevel) {
       return;
     }
     const data = new Uint8Array(this.analyser.frequencyBinCount);
@@ -189,14 +155,12 @@ export class AudioEngine {
   startRecording() {
     this.recordedChunks = [[], []];
     this.isCapturing = true;
+    this.recordStartTime = this.audioContext.currentTime;
   }
 
   stopRecordingToLoop() {
     this.isCapturing = false;
     const buffer = this.#chunksToBuffer(this.recordedChunks);
-    if (!buffer) {
-      return null;
-    }
     this.previousLoopBuffer = this.loopBuffer;
     this.loopBuffer = buffer;
     this.playLoop();
@@ -209,6 +173,7 @@ export class AudioEngine {
     }
     this.recordedChunks = [[], []];
     this.isCapturing = true;
+    this.overdubStartTime = this.audioContext.currentTime;
   }
 
   stopOverdub() {
@@ -219,9 +184,6 @@ export class AudioEngine {
 
     this.isCapturing = false;
     const overdubBuffer = this.#chunksToBuffer(this.recordedChunks);
-    if (!overdubBuffer) {
-      return;
-    }
     const merged = this.#mixBuffers(this.loopBuffer, overdubBuffer);
     this.previousLoopBuffer = this.loopBuffer;
     this.loopBuffer = merged;
@@ -237,9 +199,11 @@ export class AudioEngine {
     this.loopSource = this.audioContext.createBufferSource();
     this.loopSource.buffer = this.loopBuffer;
     this.loopSource.loop = true;
-    this.loopSource.connect(this.loopGain);
+    this.loopSource.connect(this.masterGain);
 
-    this.loopSource.start(this.audioContext.currentTime + 0.01, 0);
+    const startAt = this.audioContext.currentTime + 0.02;
+    this.loopStartTime = startAt;
+    this.loopSource.start(startAt, 0);
   }
 
   stop() {
@@ -280,9 +244,6 @@ export class AudioEngine {
     const leftLength = chunks[0].reduce((sum, channel) => sum + channel.length, 0);
     const rightLength = chunks[1].reduce((sum, channel) => sum + channel.length, 0);
     const frameCount = Math.max(leftLength, rightLength);
-    if (!frameCount) {
-      return null;
-    }
 
     const buffer = this.audioContext.createBuffer(2, frameCount, this.audioContext.sampleRate);
     const leftChannel = buffer.getChannelData(0);
@@ -314,8 +275,7 @@ export class AudioEngine {
       const overData = overdubBuffer.getChannelData(Math.min(channel, overdubBuffer.numberOfChannels - 1));
       for (let i = 0; i < frameCount; i += 1) {
         const over = overData[i % overData.length] || 0;
-        const mixed = (baseData[i] * 0.85) + (over * 0.65);
-        outData[i] = Math.max(-0.98, Math.min(0.98, mixed));
+        outData[i] = Math.max(-1, Math.min(1, baseData[i] + over));
       }
     }
 
