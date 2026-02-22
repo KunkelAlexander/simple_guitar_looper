@@ -39,3 +39,6 @@ Then open `http://localhost:8080`.
 
 - Recording capture uses AudioWorklet when available (with ScriptProcessor fallback) for more stable real-time buffering.
 - Loop playback is stopped when starting a fresh recording to avoid bleed/echo during capture.
+
+- The looper now supports two independent track slots (Track 1 / Track 2) for quick A/B loop workflow.
+- Guitar mode applies extra input gain to compensate for low-level interface instrument inputs.
