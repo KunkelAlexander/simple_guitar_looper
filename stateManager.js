@@ -1,30 +1,25 @@
-/**
- * Handles looper state transitions independent of rendering and audio internals.
- */
 export const LoopState = Object.freeze({
   IDLE: "idle",
   RECORDING: "recording",
+  READY: "ready",
   PLAYING: "playing",
-  OVERDUBBING: "overdubbing",
 });
 
 export class StateManager {
   constructor() {
     this.state = LoopState.IDLE;
-    this.subscribers = new Set();
+    this.listeners = new Set();
   }
 
-  subscribe(callback) {
-    this.subscribers.add(callback);
-    callback(this.state);
-    return () => this.subscribers.delete(callback);
+  subscribe(listener) {
+    this.listeners.add(listener);
+    listener(this.state);
+    return () => this.listeners.delete(listener);
   }
 
-  setState(nextState) {
-    this.state = nextState;
-    for (const subscriber of this.subscribers) {
-      subscriber(this.state);
-    }
+  setState(next) {
+    this.state = next;
+    this.listeners.forEach((listener) => listener(next));
   }
 
   getState() {

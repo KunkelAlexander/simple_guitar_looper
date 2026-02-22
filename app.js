@@ -3,138 +3,140 @@ import { DeviceManager } from "./deviceManager.js";
 import { StateManager, LoopState } from "./stateManager.js";
 import { UIController } from "./uiController.js";
 
-const audioEngine = new AudioEngine();
-const deviceManager = new DeviceManager();
-const stateManager = new StateManager();
+const engine = new AudioEngine();
+const devices = new DeviceManager();
+const state = new StateManager();
 const ui = new UIController();
 
-let activeTrack = 0;
+let monitorEnabled = false;
 let processingMode = "guitar";
 let lowLatencyMode = true;
-let monitorEnabled = false;
 let activeInputId = "";
 
 async function bootstrap() {
   ui.bindHandlers({
-    onTrackPress: handleTrackPress,
+    onRecord: handleRecord,
+    onPlay: handlePlay,
     onStop: handleStop,
-    onClearLongPress: handleClearLongPress,
+    onClear: handleClear,
     onToggleMonitor: toggleMonitor,
     onToggleProcessing: toggleProcessing,
     onToggleLatencyMode: toggleLatency,
     onRefreshDevices: refreshDevices,
-    onInputDeviceChange: switchInputDevice,
-    onVolumeChange: (v) => audioEngine.setMasterVolume(v),
-    onOutputDeviceChange: () => {},
+    onInputDeviceChange: switchInput,
+    onOutputDeviceChange: switchOutput,
+    onVolumeChange: (value) => engine.setMasterVolume(value),
   });
 
-  stateManager.subscribe((state) => {
-    ui.renderState(state, { activeTrack, loopPresence: [audioEngine.hasLoop(0), audioEngine.hasLoop(1)] });
+  state.subscribe((current) => {
+    ui.renderState(current, { hasLoop: engine.hasLoop() });
   });
 
-  audioEngine.setLevelCallback((level) => ui.drawLevel(level));
+  engine.setLevelCallback((level) => ui.drawLevel(level));
 
   await initializeAudio();
   await refreshDevices();
-  ui.setTrackState(activeTrack);
-  ui.setProcessingState(processingMode);
-  ui.setLatencyModeState(lowLatencyMode);
-  ui.setMonitorState(monitorEnabled);
-  showSupportNote();
+  ui.setMonitor(monitorEnabled);
+  ui.setProcessing(processingMode);
+  ui.setLatency(lowLatencyMode);
+  setHelpText();
 }
 
 async function initializeAudio(inputId = "") {
   activeInputId = inputId;
-  deviceManager.setProcessingMode(processingMode);
-  deviceManager.setLowLatencyMode(lowLatencyMode);
-  const stream = await deviceManager.requestInputStream(inputId);
+  devices.setProcessingMode(processingMode);
+  devices.setLowLatencyMode(lowLatencyMode);
+  const stream = await devices.requestInputStream(inputId);
 
-  if (!audioEngine.audioContext) await audioEngine.init(stream);
-  else await audioEngine.updateInputStream(stream);
+  if (!engine.audioContext) await engine.init(stream);
+  else await engine.updateInputStream(stream);
 
-  audioEngine.setLowLatencyMode(lowLatencyMode);
-  audioEngine.setProcessingMode(processingMode);
-  audioEngine.setInputMonitoring(monitorEnabled);
-  audioEngine.setActiveTrack(activeTrack);
-  audioEngine.setMasterVolume(Number(ui.elements.volume.value));
+  engine.setProcessingMode(processingMode);
+  engine.setInputMonitoring(monitorEnabled);
+  engine.setMasterVolume(Number(ui.elements.volume.value));
 }
 
 async function refreshDevices() {
-  const { inputs } = await deviceManager.listAudioDevices();
-  ui.renderDevices(inputs);
+  const list = await devices.listAudioDevices();
+  ui.renderDevices({
+    inputs: list.inputs,
+    outputs: list.outputs,
+    outputSupported: devices.outputSelectionSupported(),
+  });
 }
 
-async function switchInputDevice(deviceId) { await initializeAudio(deviceId); }
-
-async function toggleProcessing() {
-  processingMode = processingMode === "guitar" ? "voice" : "guitar";
-  ui.setProcessingState(processingMode);
-  await initializeAudio(activeInputId);
-  showSupportNote();
+async function switchInput(deviceId) {
+  await initializeAudio(deviceId);
 }
 
-async function toggleLatency() {
-  lowLatencyMode = !lowLatencyMode;
-  ui.setLatencyModeState(lowLatencyMode);
-  await initializeAudio(activeInputId);
-  showSupportNote();
+async function switchOutput(deviceId) {
+  try {
+    const switched = await engine.setOutputDevice(deviceId);
+    if (!switched) ui.setSupportNote("Output selection not supported by this browser.");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function handleRecord() {
+  const current = state.getState();
+  if (current === LoopState.RECORDING) {
+    const ok = engine.stopRecordingToLoop();
+    state.setState(ok ? LoopState.READY : LoopState.IDLE);
+    return;
+  }
+  if (current === LoopState.PLAYING) {
+    engine.stop();
+  }
+  engine.startRecording();
+  state.setState(LoopState.RECORDING);
+}
+
+function handlePlay() {
+  const played = engine.playLoop();
+  state.setState(played ? LoopState.PLAYING : LoopState.IDLE);
+}
+
+function handleStop() {
+  if (state.getState() === LoopState.RECORDING) {
+    const ok = engine.stopRecordingToLoop();
+    state.setState(ok ? LoopState.READY : LoopState.IDLE);
+    return;
+  }
+  engine.stop();
+  state.setState(engine.hasLoop() ? LoopState.READY : LoopState.IDLE);
+}
+
+function handleClear() {
+  engine.clear();
+  state.setState(LoopState.IDLE);
 }
 
 function toggleMonitor() {
   monitorEnabled = !monitorEnabled;
-  audioEngine.setInputMonitoring(monitorEnabled);
-  ui.setMonitorState(monitorEnabled);
+  engine.setInputMonitoring(monitorEnabled);
+  ui.setMonitor(monitorEnabled);
 }
 
-function handleTrackPress(trackIndex) {
-  const state = stateManager.getState();
-
-  if (state === LoopState.RECORDING && trackIndex === activeTrack) {
-    audioEngine.stopRecordingToLoop();
-    stateManager.setState(LoopState.IDLE);
-    return;
-  }
-
-  if (trackIndex !== activeTrack) {
-    activeTrack = trackIndex;
-    audioEngine.setActiveTrack(trackIndex);
-    ui.setTrackState(trackIndex);
-    stateManager.setState(LoopState.IDLE);
-    return;
-  }
-
-  if (!audioEngine.hasLoop(trackIndex)) {
-    audioEngine.startRecording();
-    stateManager.setState(LoopState.RECORDING);
-    return;
-  }
-
-  const played = audioEngine.playLoop();
-  stateManager.setState(played ? LoopState.PLAYING : LoopState.IDLE);
+async function toggleProcessing() {
+  processingMode = processingMode === "guitar" ? "voice" : "guitar";
+  ui.setProcessing(processingMode);
+  await initializeAudio(activeInputId);
+  setHelpText();
 }
 
-function handleStop() {
-  const state = stateManager.getState();
-  if (state === LoopState.RECORDING) {
-    audioEngine.stopRecordingToLoop();
-  }
-  audioEngine.stop();
-  stateManager.setState(LoopState.IDLE);
+async function toggleLatency() {
+  lowLatencyMode = !lowLatencyMode;
+  ui.setLatency(lowLatencyMode);
+  await initializeAudio(activeInputId);
+  setHelpText();
 }
 
-function handleClearLongPress() {
-  audioEngine.clearTrack(activeTrack);
-  stateManager.setState(LoopState.IDLE);
-  showSupportNote("Track cleared");
-}
-
-function showSupportNote(custom) {
-  if (custom) {
-    ui.setSupportNote(custom);
-    return;
-  }
-  const processing = processingMode === "guitar" ? "Guitar mode adds input boost for audio interfaces." : "Voice mode enables browser voice processing.";
-  ui.setSupportNote(`${processing} Tap track pad: record -> stop -> play. Hold Stop to clear current track.`);
+function setHelpText() {
+  const mode = processingMode === "guitar"
+    ? "Guitar mode boosts input for interfaces."
+    : "Voice mode uses browser cleanup and can color tone.";
+  ui.setSupportNote(`${mode} Flow: Record → Stop (ready) → Play → Stop.`);
 }
 
 bootstrap().catch((error) => {

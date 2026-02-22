@@ -1,6 +1,6 @@
 # Web Guitar Looper
 
-A fully client-side guitar looper built with modular Web Audio components for future DSP and ML effects.
+Simple, client-side looper with input/output device selection and low-latency guitar defaults.
 
 ## Run locally
 
@@ -10,23 +10,17 @@ python3 -m http.server 8080
 
 Open `http://localhost:8080`.
 
-## Interaction model
+## Usage
 
-- Tap a track bubble once to **record**.
-- Tap the same bubble again (or press **Stop**) to **finish recording**.
-- The loop does **not autoplay** after recording.
-- Tap the same bubble again to **play**.
-- Press **Stop** to stop playback.
-- **Long-press Stop** to clear the current track.
+1. Select your input device (and output if supported).
+2. Press **Record** to start recording.
+3. Press **Record** again or **Stop** to finish recording (no autoplay).
+4. Press **Play** to start loop playback.
+5. Press **Stop** to stop playback.
+6. Press **Clear** to remove the loop.
 
-## Audio quality notes
+## Notes
 
-- `Mode: Guitar` is the default and includes input boost for low instrument-level interfaces.
-- `Mode: Voice` enables browser echo/noise/AGC processing and may color guitar tone.
-- `Latency: Low` is best for live feel; `Balanced` adds extra processing path.
-
-## GitHub Pages deployment (short guide)
-
-1. Push this repository to GitHub.
-2. In **Settings → Pages**, deploy from the default branch root.
-3. Open `https://<username>.github.io/<repo>/` when published.
+- `Mode: Guitar` applies an input boost for low instrument-level interfaces.
+- `Mode: Voice` enables browser echo/noise/AGC processing.
+- Output selection depends on browser `setSinkId` support.

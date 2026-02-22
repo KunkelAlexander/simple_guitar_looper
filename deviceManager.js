@@ -1,37 +1,26 @@
-/**
- * Handles input and output device enumeration and selection.
- */
 export class DeviceManager {
   constructor() {
-    this.processingMode = "guitar";
     this.lowLatencyMode = true;
+    this.processingMode = "guitar";
   }
 
-  setProcessingMode(mode) {
-    this.processingMode = mode;
-  }
+  setLowLatencyMode(enabled) { this.lowLatencyMode = enabled; }
+  setProcessingMode(mode) { this.processingMode = mode; }
 
-  setLowLatencyMode(enabled) {
-    this.lowLatencyMode = enabled;
-  }
-
-  async requestInputStream(inputDeviceId) {
-    const voiceMode = this.processingMode === "voice";
-    const constraints = {
+  async requestInputStream(inputDeviceId = "") {
+    const voice = this.processingMode === "voice";
+    return navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: inputDeviceId ? { exact: inputDeviceId } : undefined,
         channelCount: { ideal: 1 },
         sampleRate: { ideal: 48000 },
-        sampleSize: { ideal: 16 },
         latency: this.lowLatencyMode ? { ideal: 0.005 } : { ideal: 0.02 },
-        echoCancellation: voiceMode,
-        noiseSuppression: voiceMode,
-        autoGainControl: voiceMode,
+        echoCancellation: voice,
+        noiseSuppression: voice,
+        autoGainControl: voice,
       },
       video: false,
-    };
-
-    return navigator.mediaDevices.getUserMedia(constraints);
+    });
   }
 
   async listAudioDevices() {
@@ -43,6 +32,6 @@ export class DeviceManager {
   }
 
   outputSelectionSupported() {
-    return typeof HTMLMediaElement.prototype.setSinkId === "function" && typeof navigator.mediaDevices.selectAudioOutput === "function";
+    return typeof HTMLMediaElement.prototype.setSinkId === "function";
   }
 }

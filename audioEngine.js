@@ -1,55 +1,45 @@
-import { AmpModel } from "./effects/ampModel.js";
-import { Pedalboard } from "./effects/pedalboard.js";
-
 export class AudioEngine {
   constructor() {
     this.audioContext = null;
     this.sourceNode = null;
     this.inputGain = null;
-    this.highpassFilter = null;
     this.captureGain = null;
     this.monitorGain = null;
-    this.loopGain = null;
     this.masterGain = null;
     this.analyser = null;
-    this.effects = [];
+
+    this.outputDestination = null;
+    this.outputElement = null;
+
     this.recorderNode = null;
     this.silentSink = null;
     this.recordedChunks = [];
-    this.loopBuffers = [null, null];
-    this.previousLoopBuffers = [null, null];
-    this.currentTrack = 0;
+    this.loopBuffer = null;
     this.loopSource = null;
-    this.isCapturing = false;
-    this.monitorEnabled = false;
-    this.lowLatencyMode = true;
-    this.onLevel = null;
+    this.isRecording = false;
     this.levelRaf = null;
+    this.onLevel = null;
   }
 
   async init(stream) {
     this.audioContext = this.audioContext || new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume();
+
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
     this.inputGain = this.audioContext.createGain();
-    this.highpassFilter = this.audioContext.createBiquadFilter();
     this.captureGain = this.audioContext.createGain();
     this.monitorGain = this.audioContext.createGain();
-    this.loopGain = this.audioContext.createGain();
     this.masterGain = this.audioContext.createGain();
     this.analyser = this.audioContext.createAnalyser();
 
-    this.highpassFilter.type = "highpass";
-    this.highpassFilter.frequency.value = 30;
-    this.loopGain.gain.value = 0.9;
-    this.masterGain.gain.value = 0.85;
+    this.inputGain.gain.value = 2.2;
     this.monitorGain.gain.value = 0;
+    this.masterGain.gain.value = 0.85;
     this.analyser.fftSize = 512;
 
-    this.effects = [new Pedalboard(this.audioContext), new AmpModel(this.audioContext)];
     this.#wireGraph();
-    await this.#setupRecorder();
-    this.#startLevelMeter();
+    this.#setupRecorder();
+    this.#startMeter();
   }
 
   async updateInputStream(stream) {
@@ -57,80 +47,69 @@ export class AudioEngine {
     this.sourceNode?.disconnect();
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
     this.#wireGraph();
-    await this.#setupRecorder();
+    this.#setupRecorder();
   }
 
   #disconnect(node) { try { node?.disconnect(); } catch {} }
 
   #wireGraph() {
-    [this.sourceNode, this.inputGain, this.highpassFilter, this.captureGain, this.monitorGain, this.loopGain, this.masterGain].forEach((n) => this.#disconnect(n));
-    this.effects.forEach((e) => { this.#disconnect(e.input); this.#disconnect(e.output); });
+    [this.sourceNode, this.inputGain, this.captureGain, this.monitorGain, this.masterGain, this.outputDestination].forEach((n) => this.#disconnect(n));
 
     this.sourceNode.connect(this.inputGain);
-    this.inputGain.connect(this.highpassFilter);
-
-    let node = this.highpassFilter;
-    if (!this.lowLatencyMode) {
-      for (const effect of this.effects) {
-        node.connect(effect.input);
-        node = effect.output;
-      }
-    }
-
-    node.connect(this.captureGain);
+    this.inputGain.connect(this.captureGain);
     this.captureGain.connect(this.monitorGain);
     this.captureGain.connect(this.analyser);
-    this.loopGain.connect(this.masterGain);
+
     this.monitorGain.connect(this.masterGain);
-    this.masterGain.connect(this.audioContext.destination);
+
+    // loop playback joins master path
+    this.outputDestination = this.audioContext.createMediaStreamDestination();
+    this.masterGain.connect(this.outputDestination);
+
+    this.outputElement = this.outputElement || new Audio();
+    this.outputElement.autoplay = true;
+    this.outputElement.srcObject = this.outputDestination.stream;
+    this.outputElement.play().catch(() => {});
   }
 
-  async #setupRecorder() {
+  #setupRecorder() {
     this.#disconnect(this.recorderNode);
     this.#disconnect(this.silentSink);
-
-    if (this.audioContext.audioWorklet) {
-      try {
-        await this.audioContext.audioWorklet.addModule("./recorderWorklet.js");
-        this.recorderNode = new AudioWorkletNode(this.audioContext, "recorder-processor", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
-        this.silentSink = this.audioContext.createGain();
-        this.silentSink.gain.value = 0;
-        this.captureGain.connect(this.recorderNode);
-        this.recorderNode.connect(this.silentSink);
-        this.silentSink.connect(this.audioContext.destination);
-        this.recorderNode.port.onmessage = (event) => {
-          if (this.isCapturing) this.recordedChunks.push(new Float32Array(event.data));
-        };
-        return;
-      } catch {}
-    }
 
     this.recorderNode = this.audioContext.createScriptProcessor(512, 1, 1);
     this.silentSink = this.audioContext.createGain();
     this.silentSink.gain.value = 0;
+
     this.captureGain.connect(this.recorderNode);
     this.recorderNode.connect(this.silentSink);
     this.silentSink.connect(this.audioContext.destination);
+
     this.recorderNode.onaudioprocess = (event) => {
-      if (this.isCapturing) this.recordedChunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      if (!this.isRecording) return;
+      this.recordedChunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
     };
   }
 
-  setLowLatencyMode(enabled) { this.lowLatencyMode = enabled; if (this.audioContext) this.#wireGraph(); }
-  setInputMonitoring(enabled) { this.monitorEnabled = enabled; this.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, this.audioContext.currentTime, 0.01); }
-  setMasterVolume(value) { this.masterGain.gain.setTargetAtTime(value, this.audioContext.currentTime, 0.01); }
   setProcessingMode(mode) {
-    if (mode === "guitar") {
-      this.inputGain.gain.setTargetAtTime(2.6, this.audioContext.currentTime, 0.01);
-      this.highpassFilter.frequency.setTargetAtTime(22, this.audioContext.currentTime, 0.01);
-    } else {
-      this.inputGain.gain.setTargetAtTime(1.0, this.audioContext.currentTime, 0.01);
-      this.highpassFilter.frequency.setTargetAtTime(70, this.audioContext.currentTime, 0.01);
-    }
+    if (!this.inputGain) return;
+    this.inputGain.gain.setTargetAtTime(mode === "guitar" ? 2.6 : 1.0, this.audioContext.currentTime, 0.01);
   }
 
-  setLevelCallback(callback) { this.onLevel = callback; }
-  #startLevelMeter() {
+  setInputMonitoring(enabled) {
+    if (!this.monitorGain) return;
+    this.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, this.audioContext.currentTime, 0.01);
+  }
+
+  setMasterVolume(value) {
+    if (!this.masterGain) return;
+    this.masterGain.gain.setTargetAtTime(value, this.audioContext.currentTime, 0.01);
+  }
+
+  setLevelCallback(callback) {
+    this.onLevel = callback;
+  }
+
+  #startMeter() {
     const data = new Uint8Array(this.analyser.frequencyBinCount);
     const draw = () => {
       this.analyser.getByteTimeDomainData(data);
@@ -142,47 +121,67 @@ export class AudioEngine {
     draw();
   }
 
-  setActiveTrack(index) {
-    this.currentTrack = index;
-    this.stopLoopSource();
+  startRecording() {
+    this.stopLoop();
+    this.recordedChunks = [];
+    this.isRecording = true;
   }
 
-  startRecording() { this.stopLoopSource(); this.recordedChunks = []; this.isCapturing = true; }
   stopRecordingToLoop() {
-    this.isCapturing = false;
-    const buffer = this.#chunksToBuffer(this.recordedChunks);
-    if (!buffer) return false;
-    this.previousLoopBuffers[this.currentTrack] = this.loopBuffers[this.currentTrack];
-    this.loopBuffers[this.currentTrack] = buffer;
+    this.isRecording = false;
+    const frameCount = this.recordedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    if (!frameCount) return false;
+
+    const buffer = this.audioContext.createBuffer(2, frameCount, this.audioContext.sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    let offset = 0;
+    for (const chunk of this.recordedChunks) {
+      left.set(chunk, offset);
+      right.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    this.loopBuffer = buffer;
     return true;
   }
 
   playLoop() {
-    const buffer = this.loopBuffers[this.currentTrack];
-    if (!buffer) return false;
-    this.stopLoopSource();
+    if (!this.loopBuffer) return false;
+    this.stopLoop();
     this.loopSource = this.audioContext.createBufferSource();
-    this.loopSource.buffer = buffer;
+    this.loopSource.buffer = this.loopBuffer;
     this.loopSource.loop = true;
-    this.loopSource.connect(this.loopGain);
+    this.loopSource.connect(this.masterGain);
     this.loopSource.start();
     return true;
   }
 
-  stop() { this.isCapturing = false; this.stopLoopSource(); }
-  clearTrack(index = this.currentTrack) { this.stop(); this.previousLoopBuffers[index] = null; this.loopBuffers[index] = null; }
-
-  stopLoopSource() { if (!this.loopSource) return; try { this.loopSource.stop(); } catch {} this.loopSource.disconnect(); this.loopSource = null; }
-
-  #chunksToBuffer(chunks) {
-    const frameCount = chunks.reduce((s, c) => s + c.length, 0);
-    if (!frameCount) return null;
-    const b = this.audioContext.createBuffer(2, frameCount, this.audioContext.sampleRate);
-    const l = b.getChannelData(0); const r = b.getChannelData(1);
-    let offset = 0;
-    for (const c of chunks) { l.set(c, offset); r.set(c, offset); offset += c.length; }
-    return b;
+  stopLoop() {
+    if (!this.loopSource) return;
+    try { this.loopSource.stop(); } catch {}
+    this.loopSource.disconnect();
+    this.loopSource = null;
   }
 
-  hasLoop(index = this.currentTrack) { return Boolean(this.loopBuffers[index]); }
+  stop() {
+    this.isRecording = false;
+    this.stopLoop();
+  }
+
+  clear() {
+    this.stop();
+    this.loopBuffer = null;
+  }
+
+  hasLoop() {
+    return Boolean(this.loopBuffer);
+  }
+
+  async setOutputDevice(deviceId) {
+    if (!this.outputElement || typeof this.outputElement.setSinkId !== "function") return false;
+    await this.outputElement.setSinkId(deviceId);
+    return true;
+  }
 }

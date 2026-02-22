@@ -7,34 +7,41 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="top-bar card">
-        <button id="stop-btn" class="transport-btn" type="button">Stop</button>
-        <button id="monitor-toggle-btn" class="secondary-btn" type="button">Monitor Off</button>
-        <button id="input-processing-btn" class="secondary-btn" type="button">Mode: Guitar</button>
-        <button id="latency-mode-btn" class="secondary-btn" type="button">Latency: Low</button>
+    <main class="app">
+      <header>
+        <h1>Web Guitar Looper</h1>
+        <p id="support-note" class="muted"></p>
       </header>
 
-      <section class="card device-row" aria-label="device selection">
-        <select id="input-device-select" aria-label="Input device"></select>
-        <button id="refresh-devices-btn" class="secondary-btn" type="button">Refresh Inputs</button>
+      <section class="panel">
+        <h2>Audio Devices</h2>
+        <div class="grid">
+          <label for="input-device-select">Input</label>
+          <select id="input-device-select"></select>
+
+          <label for="output-device-select">Output (if supported)</label>
+          <select id="output-device-select"></select>
+        </div>
+        <button id="refresh-devices-btn" type="button">Refresh devices</button>
       </section>
 
-      <section class="pad-grid" aria-label="loop pads">
-        <button id="track-1-btn" class="loop-pad" type="button"><span>Track 1</span></button>
-        <button id="track-2-btn" class="loop-pad" type="button"><span>Track 2</span></button>
-      </section>
+      <section class="panel">
+        <h2>Transport</h2>
+        <div class="controls">
+          <button id="record-btn" class="accent" type="button">Record</button>
+          <button id="play-btn" type="button" disabled>Play</button>
+          <button id="stop-btn" type="button" disabled>Stop</button>
+          <button id="clear-btn" type="button" disabled>Clear</button>
+        </div>
 
-      <section class="card meter-card">
         <div class="status-row">
-          <span id="loop-indicator" class="indicator idle">Idle</span>
+          <span id="loop-indicator" class="badge idle">Idle</span>
           <label for="master-volume">Master</label>
           <input id="master-volume" type="range" min="0" max="1" step="0.01" value="0.85" />
         </div>
-        <canvas id="level-meter" width="600" height="80" aria-label="Audio level meter"></canvas>
-      </section>
 
-      <footer class="app-footer"><p id="support-note"></p></footer>
+        <canvas id="level-meter" width="700" height="90"></canvas>
+      </section>
     </main>
 
     <script type="module" src="./app.js"></script>
