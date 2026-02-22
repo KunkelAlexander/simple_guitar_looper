@@ -4,41 +4,29 @@ A fully client-side guitar looper built with modular Web Audio components for fu
 
 ## Run locally
 
-Because this app uses ES modules and media APIs, serve it via a local HTTP server:
-
 ```bash
 python3 -m http.server 8080
 ```
 
-Then open `http://localhost:8080`.
+Open `http://localhost:8080`.
+
+## Interaction model
+
+- Tap a track bubble once to **record**.
+- Tap the same bubble again (or press **Stop**) to **finish recording**.
+- The loop does **not autoplay** after recording.
+- Tap the same bubble again to **play**.
+- Press **Stop** to stop playback.
+- **Long-press Stop** to clear the current track.
+
+## Audio quality notes
+
+- `Mode: Guitar` is the default and includes input boost for low instrument-level interfaces.
+- `Mode: Voice` enables browser echo/noise/AGC processing and may color guitar tone.
+- `Latency: Low` is best for live feel; `Balanced` adds extra processing path.
 
 ## GitHub Pages deployment (short guide)
 
 1. Push this repository to GitHub.
-2. In your repository settings, open **Pages**.
-3. Set **Source** to deploy from the `main` branch (root folder).
-4. Save and wait for Pages to publish.
-5. Open the provided `https://<username>.github.io/<repo>/` URL.
-
-## Notes
-
-- Input device selection works through `getUserMedia` + `enumerateDevices`.
-- Output device selection depends on browser support (`setSinkId` / `selectAudioOutput`) and may be unavailable in Firefox Android.
-- The effects chain is intentionally plugin-ready (`effects/pedalboard.js`, `effects/ampModel.js`).
-
-
-## Audio quality tips
-
-- Input monitoring is OFF by default to avoid mic-speaker feedback loops.
-- `Input Processing: Guitar` is default for instrument tone and lowest coloration.
-- Switch to `Input Processing: Voice` only when you need browser echo/noise cleanup.
-- Keep `Latency: Low` for fastest monitoring/response; use `Balanced` only if you want fuller processing at higher latency.
-- Use wired headphones for clean overdubs on mobile devices.
-- If you hear clipping with hot instrument signals, lower your interface output level and app master volume.
-- A built-in compressor/limiter and safer overdub gain staging are enabled to reduce distortion.
-
-- Recording capture uses AudioWorklet when available (with ScriptProcessor fallback) for more stable real-time buffering.
-- Loop playback is stopped when starting a fresh recording to avoid bleed/echo during capture.
-
-- The looper now supports two independent track slots (Track 1 / Track 2) for quick A/B loop workflow.
-- Guitar mode applies extra input gain to compensate for low-level interface instrument inputs.
+2. In **Settings → Pages**, deploy from the default branch root.
+3. Open `https://<username>.github.io/<repo>/` when published.

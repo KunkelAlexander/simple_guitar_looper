@@ -8,33 +8,28 @@ const deviceManager = new DeviceManager();
 const stateManager = new StateManager();
 const ui = new UIController();
 
-let monitorEnabled = false;
+let activeTrack = 0;
 let processingMode = "guitar";
 let lowLatencyMode = true;
+let monitorEnabled = false;
 let activeInputId = "";
-let activeTrack = 0;
-let overdubTimer = null;
 
 async function bootstrap() {
   ui.bindHandlers({
-    onRecord: handleRecord,
-    onPlayPause: handlePlayPause,
-    onOverdub: handleOverdub,
+    onTrackPress: handleTrackPress,
     onStop: handleStop,
-    onClear: handleClear,
-    onUndo: handleUndo,
+    onClearLongPress: handleClearLongPress,
     onToggleMonitor: toggleMonitor,
     onToggleProcessing: toggleProcessing,
-    onToggleLatencyMode: toggleLatencyMode,
-    onSelectTrack: selectTrack,
+    onToggleLatencyMode: toggleLatency,
     onRefreshDevices: refreshDevices,
     onInputDeviceChange: switchInputDevice,
-    onOutputDeviceChange: switchOutputDevice,
-    onVolumeChange: (value) => audioEngine.setMasterVolume(value),
+    onVolumeChange: (v) => audioEngine.setMasterVolume(v),
+    onOutputDeviceChange: () => {},
   });
 
   stateManager.subscribe((state) => {
-    ui.renderState(state, { hasLoop: audioEngine.hasLoop() });
+    ui.renderState(state, { activeTrack, loopPresence: [audioEngine.hasLoop(0), audioEngine.hasLoop(1)] });
   });
 
   audioEngine.setLevelCallback((level) => ui.drawLevel(level));
@@ -42,9 +37,9 @@ async function bootstrap() {
   await initializeAudio();
   await refreshDevices();
   ui.setTrackState(activeTrack);
-  ui.setMonitorState(monitorEnabled);
   ui.setProcessingState(processingMode);
   ui.setLatencyModeState(lowLatencyMode);
+  ui.setMonitorState(monitorEnabled);
   showSupportNote();
 }
 
@@ -57,105 +52,89 @@ async function initializeAudio(inputId = "") {
   if (!audioEngine.audioContext) await audioEngine.init(stream);
   else await audioEngine.updateInputStream(stream);
 
-  audioEngine.setActiveTrack(activeTrack);
   audioEngine.setLowLatencyMode(lowLatencyMode);
   audioEngine.setProcessingMode(processingMode);
   audioEngine.setInputMonitoring(monitorEnabled);
+  audioEngine.setActiveTrack(activeTrack);
   audioEngine.setMasterVolume(Number(ui.elements.volume.value));
 }
 
 async function refreshDevices() {
-  const devices = await deviceManager.listAudioDevices();
-  ui.renderDevices({ inputs: devices.inputs, outputs: devices.outputs, outputSupported: deviceManager.outputSelectionSupported() });
+  const { inputs } = await deviceManager.listAudioDevices();
+  ui.renderDevices(inputs);
 }
 
-async function switchInputDevice(inputDeviceId) { await initializeAudio(inputDeviceId); }
+async function switchInputDevice(deviceId) { await initializeAudio(deviceId); }
 
-async function switchOutputDevice(outputDeviceId) {
-  try {
-    const switched = await audioEngine.setOutputDevice(outputDeviceId);
-    if (!switched) ui.setSupportNote("Output switching is not active in low-latency mode. Use system/browser output routing.");
-  } catch (error) {
-    console.warn("Output switching failed", error);
-  }
+async function toggleProcessing() {
+  processingMode = processingMode === "guitar" ? "voice" : "guitar";
+  ui.setProcessingState(processingMode);
+  await initializeAudio(activeInputId);
+  showSupportNote();
 }
 
-function selectTrack(track) {
-  activeTrack = track;
-  audioEngine.setActiveTrack(track);
-  ui.setTrackState(track);
-  stateManager.setState(audioEngine.hasLoop() ? LoopState.PLAYING : LoopState.IDLE);
+async function toggleLatency() {
+  lowLatencyMode = !lowLatencyMode;
+  ui.setLatencyModeState(lowLatencyMode);
+  await initializeAudio(activeInputId);
+  showSupportNote();
 }
 
-function toggleMonitor() { monitorEnabled = !monitorEnabled; audioEngine.setInputMonitoring(monitorEnabled); ui.setMonitorState(monitorEnabled); }
-async function toggleProcessing() { processingMode = processingMode === "guitar" ? "voice" : "guitar"; ui.setProcessingState(processingMode); await initializeAudio(activeInputId); showSupportNote(); }
-async function toggleLatencyMode() { lowLatencyMode = !lowLatencyMode; ui.setLatencyModeState(lowLatencyMode); await initializeAudio(activeInputId); showSupportNote(); }
+function toggleMonitor() {
+  monitorEnabled = !monitorEnabled;
+  audioEngine.setInputMonitoring(monitorEnabled);
+  ui.setMonitorState(monitorEnabled);
+}
 
-function handleRecord() {
+function handleTrackPress(trackIndex) {
   const state = stateManager.getState();
-  if (state === LoopState.RECORDING) {
-    const loop = audioEngine.stopRecordingToLoop();
-    stateManager.setState(loop || audioEngine.hasLoop() ? LoopState.PLAYING : LoopState.IDLE);
+
+  if (state === LoopState.RECORDING && trackIndex === activeTrack) {
+    audioEngine.stopRecordingToLoop();
+    stateManager.setState(LoopState.IDLE);
     return;
   }
-  audioEngine.startRecording();
-  stateManager.setState(LoopState.RECORDING);
-}
 
-function handlePlayPause() {
-  const state = stateManager.getState();
-  if (!audioEngine.hasLoop()) return;
-  if (state === LoopState.PLAYING) {
-    audioEngine.stop();
+  if (trackIndex !== activeTrack) {
+    activeTrack = trackIndex;
+    audioEngine.setActiveTrack(trackIndex);
+    ui.setTrackState(trackIndex);
     stateManager.setState(LoopState.IDLE);
-  } else {
-    audioEngine.playLoop();
-    stateManager.setState(LoopState.PLAYING);
+    return;
   }
-}
 
-function handleOverdub() {
-  if (!audioEngine.hasLoop()) return;
-  clearTimeout(overdubTimer);
-  audioEngine.startOverdub();
-  stateManager.setState(LoopState.OVERDUBBING);
-  const durationMs = (audioEngine.loopBuffers[audioEngine.currentTrack]?.duration || 0) * 1000;
-  overdubTimer = setTimeout(() => {
-    if (stateManager.getState() === LoopState.OVERDUBBING) {
-      audioEngine.stopOverdub();
-      stateManager.setState(LoopState.PLAYING);
-    }
-  }, Math.max(durationMs, 50));
+  if (!audioEngine.hasLoop(trackIndex)) {
+    audioEngine.startRecording();
+    stateManager.setState(LoopState.RECORDING);
+    return;
+  }
+
+  const played = audioEngine.playLoop();
+  stateManager.setState(played ? LoopState.PLAYING : LoopState.IDLE);
 }
 
 function handleStop() {
   const state = stateManager.getState();
   if (state === LoopState.RECORDING) {
-    const loop = audioEngine.stopRecordingToLoop();
-    stateManager.setState(loop || audioEngine.hasLoop() ? LoopState.PLAYING : LoopState.IDLE);
-    return;
+    audioEngine.stopRecordingToLoop();
   }
-  if (state === LoopState.OVERDUBBING) {
-    audioEngine.stopOverdub();
-    stateManager.setState(LoopState.PLAYING);
-    return;
-  }
-  clearTimeout(overdubTimer);
   audioEngine.stop();
   stateManager.setState(LoopState.IDLE);
 }
 
-function handleClear() { clearTimeout(overdubTimer); audioEngine.clear(); stateManager.setState(LoopState.IDLE); }
-function handleUndo() { if (audioEngine.undo()) stateManager.setState(LoopState.PLAYING); }
+function handleClearLongPress() {
+  audioEngine.clearTrack(activeTrack);
+  stateManager.setState(LoopState.IDLE);
+  showSupportNote("Track cleared");
+}
 
-function showSupportNote() {
-  const processing = processingMode === "guitar"
-    ? "Guitar mode now includes an input boost for interfaces with low instrument level."
-    : "Voice mode enables browser cleanup and typically higher perceived input loudness.";
-  const latency = lowLatencyMode
-    ? "Low latency mode is best for live guitar timing."
-    : "Balanced mode adds processing but can feel slower.";
-  ui.setSupportNote(`${processing} ${latency}`);
+function showSupportNote(custom) {
+  if (custom) {
+    ui.setSupportNote(custom);
+    return;
+  }
+  const processing = processingMode === "guitar" ? "Guitar mode adds input boost for audio interfaces." : "Voice mode enables browser voice processing.";
+  ui.setSupportNote(`${processing} Tap track pad: record -> stop -> play. Hold Stop to clear current track.`);
 }
 
 bootstrap().catch((error) => {

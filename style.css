@@ -1,147 +1,103 @@
 :root {
-  --bg: #0c0e13;
-  --bg-card: #161b25;
-  --text: #f4f7ff;
-  --muted: #a5b0cc;
-  --primary: #5e8bff;
-  --danger: #ff5d73;
-  --success: #2dd39a;
-  --border: #27304a;
+  --bg: #17191f;
+  --card: #20232c;
+  --text: #f5f7ff;
+  --muted: #99a4bf;
+  --blue: #59d8ff;
+  --pink: #f36cf5;
+  --green: #7bff87;
+  --border: #2e3444;
 }
 
-* {
-  box-sizing: border-box;
-}
-
+* { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: radial-gradient(circle at top, #10182c, var(--bg) 45%);
+  font-family: Inter, system-ui, sans-serif;
+  background: #101217;
   color: var(--text);
-  min-height: 100vh;
 }
 
 .app-shell {
-  max-width: 900px;
+  max-width: 920px;
   margin: 0 auto;
   padding: 1rem;
   display: grid;
-  gap: 1rem;
-}
-
-.app-header h1 {
-  margin-bottom: 0.2rem;
-}
-
-.subtitle {
-  margin-top: 0;
-  color: var(--muted);
+  gap: 0.9rem;
 }
 
 .card {
-  background: var(--bg-card);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 1rem;
-  padding: 1rem;
+  border-radius: 0.8rem;
+  padding: 0.7rem;
 }
 
-h2 {
-  margin-top: 0;
-}
-
-.device-grid,
-.control-grid,
+.top-bar,
+.device-row,
 .status-row {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.6rem;
 }
 
-.device-grid {
-  grid-template-columns: 1fr;
-  align-items: center;
-}
+.top-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.device-row { grid-template-columns: 1fr auto; }
+.status-row { grid-template-columns: 100px 70px 1fr; align-items: center; }
 
-.device-label {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-select,
 button,
+select,
 input[type="range"] {
   width: 100%;
-  border-radius: 0.8rem;
+  min-height: 44px;
   border: 1px solid var(--border);
-  background: #111726;
+  border-radius: 0.65rem;
+  background: #1a1f2b;
   color: var(--text);
-  min-height: 48px;
-  padding: 0.6rem 0.8rem;
-  font-size: 1rem;
+  padding: 0.45rem 0.65rem;
 }
+button { font-weight: 600; cursor: pointer; }
+.transport-btn { background: #f36cf5; color: #1a0820; }
+.secondary-btn { background: #2a3040; }
 
-button {
-  cursor: pointer;
-  font-weight: 600;
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, var(--primary), #7d4dff);
-}
-
-.secondary-btn {
-  background: #1c253b;
-}
-
-.danger-btn {
-  background: linear-gradient(135deg, var(--danger), #e74c3c);
-}
-
-.indicator {
-  justify-self: start;
-  border-radius: 999px;
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.indicator.idle { color: var(--muted); }
-.indicator.recording,
-.indicator.overdubbing { color: var(--danger); }
-.indicator.playing { color: var(--success); }
-
-.control-grid {
+.pad-grid {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
+
+.loop-pad {
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 2px solid #343c50;
+  background: radial-gradient(circle at 50% 55%, #252b3a, #1a1f2a);
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  position: relative;
+}
+.loop-pad.track1.has-loop { border-color: var(--pink); box-shadow: 0 0 0 7px #f36cf533 inset; }
+.loop-pad.track2.has-loop { border-color: var(--blue); box-shadow: 0 0 0 7px #59d8ff33 inset; }
+.loop-pad.active { outline: 3px solid var(--green); }
+.loop-pad.recording { animation: pulse 0.8s infinite alternate; }
+
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.03); }
+}
+
+.indicator { font-size: 0.9rem; color: var(--muted); }
+.indicator.recording { color: #ff9494; }
+.indicator.playing { color: var(--green); }
 
 #level-meter {
   width: 100%;
-  border-radius: 0.8rem;
   border: 1px solid var(--border);
-  background: #0b1020;
+  border-radius: 0.6rem;
+  margin-top: 0.55rem;
+  background: #0f1220;
 }
 
-.app-footer {
-  color: var(--muted);
-  font-size: 0.9rem;
-  padding-bottom: 1rem;
-}
+.app-footer { color: var(--muted); font-size: 0.9rem; }
 
-@media (min-width: 700px) {
-  .device-grid {
-    grid-template-columns: 200px 1fr;
-  }
-
-  .control-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .status-row {
-    grid-template-columns: 120px 1fr 2fr;
-    align-items: center;
-  }
+@media (min-width: 760px) {
+  .top-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

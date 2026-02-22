@@ -8,61 +8,33 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="app-header">
-        <h1>Web Guitar Looper</h1>
-        <p class="subtitle">Client-side looper with modular DSP/ML-ready architecture.</p>
+      <header class="top-bar card">
+        <button id="stop-btn" class="transport-btn" type="button">Stop</button>
+        <button id="monitor-toggle-btn" class="secondary-btn" type="button">Monitor Off</button>
+        <button id="input-processing-btn" class="secondary-btn" type="button">Mode: Guitar</button>
+        <button id="latency-mode-btn" class="secondary-btn" type="button">Latency: Low</button>
       </header>
 
-      <section class="card devices" aria-labelledby="device-heading">
-        <h2 id="device-heading">Audio Devices</h2>
-        <div class="device-grid">
-          <label class="device-label" for="input-device-select">Input Device</label>
-          <select id="input-device-select" aria-label="Input device"></select>
-
-          <label class="device-label" for="output-device-select">Output Device (experimental)</label>
-          <select id="output-device-select" aria-label="Output device"></select>
-        </div>
-        <button id="refresh-devices-btn" class="secondary-btn" type="button">Refresh Devices</button>
+      <section class="card device-row" aria-label="device selection">
+        <select id="input-device-select" aria-label="Input device"></select>
+        <button id="refresh-devices-btn" class="secondary-btn" type="button">Refresh Inputs</button>
       </section>
 
-      <section class="card controls" aria-labelledby="controls-heading">
-        <h2 id="controls-heading">Looper Controls</h2>
+      <section class="pad-grid" aria-label="loop pads">
+        <button id="track-1-btn" class="loop-pad" type="button"><span>Track 1</span></button>
+        <button id="track-2-btn" class="loop-pad" type="button"><span>Track 2</span></button>
+      </section>
+
+      <section class="card meter-card">
         <div class="status-row">
           <span id="loop-indicator" class="indicator idle">Idle</span>
-          <label for="master-volume">Master Volume</label>
-          <input id="master-volume" type="range" min="0" max="1" step="0.01" value="0.8" />
-          <button id="monitor-toggle-btn" class="secondary-btn" type="button">Input Monitor: Off</button>
-          <button id="input-processing-btn" class="secondary-btn" type="button">Input Processing: Guitar</button>
-          <button id="latency-mode-btn" class="secondary-btn" type="button">Latency: Low</button>
+          <label for="master-volume">Master</label>
+          <input id="master-volume" type="range" min="0" max="1" step="0.01" value="0.85" />
         </div>
-
-        <div class="control-grid">
-          <button id="record-btn" class="primary-btn">Record</button>
-          <button id="play-btn" class="primary-btn" disabled>Play</button>
-          <button id="overdub-btn" class="primary-btn" disabled>Overdub</button>
-          <button id="stop-btn" class="secondary-btn" disabled>Stop</button>
-          <button id="undo-btn" class="secondary-btn" disabled>Undo</button>
-          <button id="clear-btn" class="danger-btn" disabled>Clear</button>
-        </div>
+        <canvas id="level-meter" width="600" height="80" aria-label="Audio level meter"></canvas>
       </section>
 
-
-      <section class="card tracks" aria-labelledby="tracks-heading">
-        <h2 id="tracks-heading">Tracks</h2>
-        <div class="control-grid">
-          <button id="track-1-btn" class="secondary-btn" type="button">Track 1</button>
-          <button id="track-2-btn" class="secondary-btn" type="button">Track 2</button>
-        </div>
-      </section>
-
-      <section class="card visualization" aria-labelledby="visualization-heading">
-        <h2 id="visualization-heading">Input Meter</h2>
-        <canvas id="level-meter" width="600" height="120" aria-label="Audio level meter"></canvas>
-      </section>
-
-      <footer class="app-footer">
-        <p id="support-note"></p>
-      </footer>
+      <footer class="app-footer"><p id="support-note"></p></footer>
     </main>
 
     <script type="module" src="./app.js"></script>
