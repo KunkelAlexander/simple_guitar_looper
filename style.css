@@ -39,6 +39,7 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.toggles,
 .controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -86,5 +87,6 @@ button.accent { background: linear-gradient(135deg, var(--accent), #7c8bff); col
 
 @media (min-width: 740px) {
   .grid { grid-template-columns: 180px 1fr; }
+  .toggles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .controls { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
