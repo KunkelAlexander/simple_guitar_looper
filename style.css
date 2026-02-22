@@ -1,0 +1,147 @@
+:root {
+  --bg: #0c0e13;
+  --bg-card: #161b25;
+  --text: #f4f7ff;
+  --muted: #a5b0cc;
+  --primary: #5e8bff;
+  --danger: #ff5d73;
+  --success: #2dd39a;
+  --border: #27304a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: radial-gradient(circle at top, #10182c, var(--bg) 45%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.app-header h1 {
+  margin-bottom: 0.2rem;
+}
+
+.subtitle {
+  margin-top: 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+.device-grid,
+.control-grid,
+.status-row {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.device-grid {
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
+.device-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+select,
+button,
+input[type="range"] {
+  width: 100%;
+  border-radius: 0.8rem;
+  border: 1px solid var(--border);
+  background: #111726;
+  color: var(--text);
+  min-height: 48px;
+  padding: 0.6rem 0.8rem;
+  font-size: 1rem;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, var(--primary), #7d4dff);
+}
+
+.secondary-btn {
+  background: #1c253b;
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, var(--danger), #e74c3c);
+}
+
+.indicator {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.indicator.idle { color: var(--muted); }
+.indicator.recording,
+.indicator.overdubbing { color: var(--danger); }
+.indicator.playing { color: var(--success); }
+
+.control-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#level-meter {
+  width: 100%;
+  border-radius: 0.8rem;
+  border: 1px solid var(--border);
+  background: #0b1020;
+}
+
+.app-footer {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding-bottom: 1rem;
+}
+
+@media (min-width: 700px) {
+  .device-grid {
+    grid-template-columns: 200px 1fr;
+  }
+
+  .control-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .status-row {
+    grid-template-columns: 120px 1fr 2fr;
+    align-items: center;
+  }
+}
