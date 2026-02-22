@@ -30,8 +30,9 @@ Then open `http://localhost:8080`.
 ## Audio quality tips
 
 - Input monitoring is OFF by default to avoid mic-speaker feedback loops.
-- `Input Processing: Raw` is default to avoid voice breakup artifacts from aggressive browser DSP.
+- `Input Processing: Guitar` is default for instrument tone and lowest coloration.
 - Switch to `Input Processing: Voice` only when you need browser echo/noise cleanup.
+- Keep `Latency: Low` for fastest monitoring/response; use `Balanced` only if you want fuller processing at higher latency.
 - Use wired headphones for clean overdubs on mobile devices.
 - If you hear clipping with hot instrument signals, lower your interface output level and app master volume.
 - A built-in compressor/limiter and safer overdub gain staging are enabled to reduce distortion.

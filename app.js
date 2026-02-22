@@ -9,7 +9,8 @@ const stateManager = new StateManager();
 const ui = new UIController();
 
 let monitorEnabled = false;
-let processingMode = "raw";
+let processingMode = "guitar";
+let lowLatencyMode = true;
 let activeInputId = "";
 let overdubTimer = null;
 
@@ -22,6 +23,7 @@ async function bootstrap() {
     onUndo: handleUndo,
     onToggleMonitor: toggleMonitor,
     onToggleProcessing: toggleProcessing,
+    onToggleLatencyMode: toggleLatencyMode,
     onRefreshDevices: refreshDevices,
     onInputDeviceChange: switchInputDevice,
     onOutputDeviceChange: switchOutputDevice,
@@ -38,18 +40,23 @@ async function bootstrap() {
   await refreshDevices();
   ui.setMonitorState(monitorEnabled);
   ui.setProcessingState(processingMode);
+  ui.setLatencyModeState(lowLatencyMode);
   showSupportNote();
 }
 
 async function initializeAudio(inputId = "") {
   activeInputId = inputId;
   deviceManager.setProcessingMode(processingMode);
+  deviceManager.setLowLatencyMode(lowLatencyMode);
+
   const stream = await deviceManager.requestInputStream(inputId);
   if (!audioEngine.audioContext) {
     await audioEngine.init(stream);
   } else {
     await audioEngine.updateInputStream(stream);
   }
+
+  audioEngine.setLowLatencyMode(lowLatencyMode);
   audioEngine.setInputMonitoring(monitorEnabled);
   audioEngine.setMasterVolume(Number(ui.elements.volume.value));
 }
@@ -85,9 +92,17 @@ function toggleMonitor() {
 }
 
 async function toggleProcessing() {
-  processingMode = processingMode === "raw" ? "voice" : "raw";
+  processingMode = processingMode === "guitar" ? "voice" : "guitar";
   ui.setProcessingState(processingMode);
   await initializeAudio(activeInputId);
+  showSupportNote();
+}
+
+async function toggleLatencyMode() {
+  lowLatencyMode = !lowLatencyMode;
+  ui.setLatencyModeState(lowLatencyMode);
+  await initializeAudio(activeInputId);
+  showSupportNote();
 }
 
 function handleRecord() {
@@ -156,11 +171,13 @@ function handleUndo() {
 }
 
 function showSupportNote() {
-  const outputSupported = deviceManager.outputSelectionSupported();
-  const note = outputSupported
-    ? "Raw mode + low-latency capture are tuned for clearer loops; Voice mode enables browser cleanup when needed."
-    : "Raw mode + low-latency capture are default for cleaner playback; Voice mode can help noisy rooms.";
-  ui.setSupportNote(note);
+  const processingText = processingMode === "guitar"
+    ? "Guitar mode keeps browser DSP off for cleaner tone."
+    : "Voice mode enables browser echo/noise cleanup, which can color guitar tone.";
+  const latencyText = lowLatencyMode
+    ? "Low latency mode prioritizes fastest monitoring and playback response."
+    : "Balanced mode enables full processing chain with a bit more latency.";
+  ui.setSupportNote(`${processingText} ${latencyText}`);
 }
 
 bootstrap().catch((error) => {

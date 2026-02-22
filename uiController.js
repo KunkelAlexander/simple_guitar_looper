@@ -16,6 +16,7 @@ export class UIController {
       undoButton: document.getElementById("undo-btn"),
       monitorToggleButton: document.getElementById("monitor-toggle-btn"),
       processingToggleButton: document.getElementById("input-processing-btn"),
+      latencyModeButton: document.getElementById("latency-mode-btn"),
       indicator: document.getElementById("loop-indicator"),
       volume: document.getElementById("master-volume"),
       supportNote: document.getElementById("support-note"),
@@ -35,6 +36,7 @@ export class UIController {
     this.elements.undoButton.addEventListener("click", () => this.handlers.onUndo());
     this.elements.monitorToggleButton.addEventListener("click", () => this.handlers.onToggleMonitor());
     this.elements.processingToggleButton.addEventListener("click", () => this.handlers.onToggleProcessing());
+    this.elements.latencyModeButton.addEventListener("click", () => this.handlers.onToggleLatencyMode());
     this.elements.refreshDevicesButton.addEventListener("click", () => this.handlers.onRefreshDevices());
     this.elements.inputSelect.addEventListener("change", () => this.handlers.onInputDeviceChange(this.elements.inputSelect.value));
     this.elements.outputSelect.addEventListener("change", () => this.handlers.onOutputDeviceChange(this.elements.outputSelect.value));
@@ -69,7 +71,11 @@ export class UIController {
   }
 
   setProcessingState(mode) {
-    this.elements.processingToggleButton.textContent = `Input Processing: ${mode === "voice" ? "Voice" : "Raw"}`;
+    this.elements.processingToggleButton.textContent = `Input Processing: ${mode === "voice" ? "Voice" : "Guitar"}`;
+  }
+
+  setLatencyModeState(lowLatencyEnabled) {
+    this.elements.latencyModeButton.textContent = `Latency: ${lowLatencyEnabled ? "Low" : "Balanced"}`;
   }
 
   renderState(state, { hasLoop }) {

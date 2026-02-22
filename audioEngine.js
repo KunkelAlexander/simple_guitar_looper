@@ -21,7 +21,6 @@ export class AudioEngine {
 
     this.effects = [];
 
-    this.useWorkletRecorder = false;
     this.recorderNode = null;
     this.silentSink = null;
     this.recordedChunks = [];
@@ -33,6 +32,9 @@ export class AudioEngine {
     this.onLevel = null;
     this.levelRaf = null;
     this.isCapturing = false;
+
+    this.monitorEnabled = false;
+    this.lowLatencyMode = true;
   }
 
   async init(stream) {
@@ -42,33 +44,28 @@ export class AudioEngine {
 
     this.sourceNode = this.audioContext.createMediaStreamSource(stream);
     this.inputGain = this.audioContext.createGain();
-    this.inputGain.gain.value = 1;
-
     this.highpassFilter = this.audioContext.createBiquadFilter();
+    this.captureGain = this.audioContext.createGain();
+    this.monitorGain = this.audioContext.createGain();
+    this.loopGain = this.audioContext.createGain();
+    this.masterGain = this.audioContext.createGain();
+    this.compressor = this.audioContext.createDynamicsCompressor();
+    this.analyser = this.audioContext.createAnalyser();
+
     this.highpassFilter.type = "highpass";
     this.highpassFilter.frequency.value = 35;
     this.highpassFilter.Q.value = 0.707;
 
-    this.captureGain = this.audioContext.createGain();
-    this.captureGain.gain.value = 1;
-
-    this.monitorGain = this.audioContext.createGain();
+    this.loopGain.gain.value = 0.85;
+    this.masterGain.gain.value = 0.8;
     this.monitorGain.gain.value = 0;
 
-    this.loopGain = this.audioContext.createGain();
-    this.loopGain.gain.value = 0.85;
-
-    this.masterGain = this.audioContext.createGain();
-    this.masterGain.gain.value = 0.8;
-
-    this.compressor = this.audioContext.createDynamicsCompressor();
     this.compressor.threshold.value = -20;
     this.compressor.knee.value = 12;
     this.compressor.ratio.value = 2.5;
     this.compressor.attack.value = 0.002;
     this.compressor.release.value = 0.15;
 
-    this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 512;
 
     this.effects = [new Pedalboard(this.audioContext), new AmpModel(this.audioContext)];
@@ -92,24 +89,56 @@ export class AudioEngine {
     this.#startLevelMeter();
   }
 
+  #disconnectIfConnected(node) {
+    try {
+      node?.disconnect();
+    } catch (_error) {
+      // no-op
+    }
+  }
+
   #wireGraph() {
+    this.#disconnectIfConnected(this.sourceNode);
+    this.#disconnectIfConnected(this.inputGain);
+    this.#disconnectIfConnected(this.highpassFilter);
+    this.#disconnectIfConnected(this.captureGain);
+    this.#disconnectIfConnected(this.monitorGain);
+    this.#disconnectIfConnected(this.loopGain);
+    this.#disconnectIfConnected(this.masterGain);
+    this.#disconnectIfConnected(this.compressor);
+    for (const effect of this.effects) {
+      this.#disconnectIfConnected(effect.input);
+      this.#disconnectIfConnected(effect.output);
+    }
+
     this.sourceNode.connect(this.inputGain);
     this.inputGain.connect(this.highpassFilter);
 
     let currentNode = this.highpassFilter;
-    for (const effect of this.effects) {
-      currentNode.connect(effect.input);
-      currentNode = effect.output;
+    if (!this.lowLatencyMode) {
+      for (const effect of this.effects) {
+        currentNode.connect(effect.input);
+        currentNode = effect.output;
+      }
     }
 
     currentNode.connect(this.captureGain);
-    this.captureGain.connect(this.monitorGain);
     this.captureGain.connect(this.analyser);
+    this.captureGain.connect(this.monitorGain);
 
-    this.monitorGain.connect(this.masterGain);
     this.loopGain.connect(this.masterGain);
-    this.masterGain.connect(this.compressor);
-    this.compressor.connect(this.audioContext.destination);
+
+    if (this.lowLatencyMode) {
+      // Keep monitoring direct for lowest latency.
+      this.monitorGain.connect(this.audioContext.destination);
+      this.masterGain.connect(this.audioContext.destination);
+    } else {
+      this.monitorGain.connect(this.masterGain);
+      this.masterGain.connect(this.compressor);
+      this.compressor.connect(this.audioContext.destination);
+    }
+
+    this.setInputMonitoring(this.monitorEnabled);
   }
 
   async #setupRecorder() {
@@ -117,10 +146,10 @@ export class AudioEngine {
 
     if (this.recorderNode) {
       this.recorderNode.port?.close?.();
-      this.recorderNode.disconnect();
+      this.#disconnectIfConnected(this.recorderNode);
       this.recorderNode = null;
     }
-    this.silentSink?.disconnect();
+    this.#disconnectIfConnected(this.silentSink);
     this.silentSink = null;
 
     if (!this.audioContext.audioWorklet) {
@@ -135,7 +164,7 @@ export class AudioEngine {
         numberOfOutputs: 1,
         outputChannelCount: [1],
       });
-      this.useWorkletRecorder = true;
+
       this.silentSink = this.audioContext.createGain();
       this.silentSink.gain.value = 0;
 
@@ -155,9 +184,8 @@ export class AudioEngine {
   }
 
   #setupScriptProcessorFallback() {
-    this.useWorkletRecorder = false;
     const channelCount = 1;
-    const bufferSize = 2048;
+    const bufferSize = 512;
     this.recorderNode = this.audioContext.createScriptProcessor(bufferSize, channelCount, channelCount);
     this.silentSink = this.audioContext.createGain();
     this.silentSink.gain.value = 0;
@@ -175,9 +203,18 @@ export class AudioEngine {
     };
   }
 
+  setLowLatencyMode(enabled) {
+    this.lowLatencyMode = enabled;
+    if (!this.audioContext) {
+      return;
+    }
+    this.#wireGraph();
+  }
+
   setInputMonitoring(enabled) {
+    this.monitorEnabled = enabled;
     if (this.monitorGain) {
-      this.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, this.audioContext.currentTime, 0.01);
+      this.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, this.audioContext.currentTime, 0.008);
     }
   }
 
@@ -274,7 +311,7 @@ export class AudioEngine {
     this.loopSource.buffer = this.loopBuffer;
     this.loopSource.loop = true;
     this.loopSource.connect(this.loopGain);
-    this.loopSource.start(this.audioContext.currentTime + 0.01, 0);
+    this.loopSource.start(this.audioContext.currentTime, 0);
   }
 
   stop() {
@@ -350,8 +387,6 @@ export class AudioEngine {
   }
 
   async setOutputDevice(_deviceId) {
-    // Direct AudioContext.destination path is used for best quality/lowest latency.
-    // Output switching remains browser-limited and is intentionally a no-op here.
     return false;
   }
 
